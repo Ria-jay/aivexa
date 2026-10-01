@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 
 
 class ExperimentResult(str, Enum):
@@ -10,10 +11,12 @@ class ExperimentResult(str, Enum):
     NOT_APPLICABLE = "NOT_APPLICABLE"
 
 
-@dataclass
+@dataclass(frozen=True)
 class Evaluation:
     result: ExperimentResult
     rationale: str
     confidence: str
     property_name: str
     property_expectation: str
+    evaluator: str
+    evidence: dict[str, Any]
