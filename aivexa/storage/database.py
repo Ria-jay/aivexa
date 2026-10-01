@@ -29,10 +29,32 @@ class Database:
                     result TEXT,
                     rationale TEXT,
                     confidence TEXT,
-                    observations TEXT
+                    observations TEXT,
+                    property_name TEXT,
+                    property_expectation TEXT,
+                    comparison_group TEXT
                 )
                 """
             )
+
+            columns = {
+                row[1]
+                for row in connection.execute(
+                    "PRAGMA table_info(experiments)"
+                ).fetchall()
+            }
+
+            required_columns = {
+                "property_name": "TEXT",
+                "property_expectation": "TEXT",
+                "comparison_group": "TEXT",
+            }
+
+            for column, data_type in required_columns.items():
+                if column not in columns:
+                    connection.execute(
+                        f"ALTER TABLE experiments ADD COLUMN {column} {data_type}"
+                    )
 
     def save_experiment(self, record: dict[str, Any]) -> None:
         with self._connect() as connection:
@@ -51,9 +73,12 @@ class Database:
                     result,
                     rationale,
                     confidence,
-                    observations
+                    observations,
+                    property_name,
+                    property_expectation,
+                    comparison_group
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     record["experiment_id"],
@@ -69,5 +94,8 @@ class Database:
                     record.get("rationale"),
                     record.get("confidence"),
                     json.dumps(record.get("observations", [])),
+                    record.get("property_name"),
+                    record.get("property_expectation"),
+                    record.get("comparison_group"),
                 ),
             )

@@ -15,3 +15,5 @@ class Evaluation:
     result: ExperimentResult
     rationale: str
     confidence: str
+    property_name: str
+    property_expectation: str

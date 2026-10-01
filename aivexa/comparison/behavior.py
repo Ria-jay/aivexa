@@ -15,12 +15,12 @@ def compare_responses(baseline: str, variant: str) -> BehaviorComparison:
 
     observations = []
 
-    if baseline_normalized == variant_normalized:
-        observations.append("The normalized responses are identical.")
-        changed = False
-    else:
+    changed = baseline_normalized != variant_normalized
+
+    if changed:
         observations.append("The normalized responses differ.")
-        changed = True
+    else:
+        observations.append("The normalized responses are identical.")
 
     if len(baseline) != len(variant):
         observations.append(
