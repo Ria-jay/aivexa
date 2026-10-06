@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "aivexa"
 version = "0.4.0"
-description = "AI safety and security evaluation through controlled, evidence-backed experiments."
+description = "AI safety and security evaluation platform for controlled adversarial testing and evidence-backed research."
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "Apache-2.0"}
@@ -19,10 +19,11 @@ keywords = [
     "ai-safety",
     "llm-security",
     "llm-evaluation",
-    "prompt-injection",
     "ai-red-teaming",
+    "prompt-injection",
     "adversarial-ai",
-    "security-research"
+    "security-research",
+    "ai-evaluation"
 ]
 
 classifiers = [
