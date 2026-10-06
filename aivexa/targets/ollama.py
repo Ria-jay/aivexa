@@ -8,12 +8,13 @@ class OllamaTarget:
         self.endpoint = endpoint.rstrip("/")
         self.model = model
 
-    def generate(self, prompt: str) -> str:
+    def generate(self, prompt: str, options: dict | None = None) -> str:
         payload = json.dumps(
             {
                 "model": self.model,
                 "prompt": prompt,
                 "stream": False,
+            "options": options or {},
             }
         ).encode("utf-8")
 

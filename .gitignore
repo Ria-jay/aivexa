@@ -1,6 +1,53 @@
-.venv/
+# Python
 __pycache__/
 *.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Build / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Runtime databases
 *.db
 *.sqlite
 *.sqlite3
+
+# Generated results
+*_results.json
+results/
+reports/
+
+# Local configuration / secrets
+.env
+.env.*
+*.secret
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary / backup files
+*.bak
+*.tmp
+*.swp
+
+# Logs
+*.log
+logs/

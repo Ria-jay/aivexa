@@ -1,0 +1,22 @@
+{
+  "name": "authorized-ai-application",
+  "endpoint": "http://127.0.0.1:8765/api/chat",
+  "authorized": true,
+  "authorization_note": "Local test deployment owned by the researcher",
+  "method": "POST",
+  "headers": {
+    "Content-Type": "application/json",
+    "Authorization": "Bearer ${AIVEXA_TEST_TOKEN}"
+  },
+  "request_body": {
+    "message": "${input}"
+  },
+  "response_paths": {
+    "system_output": "output.text",
+    "retrieved_context": "debug.retrieved_context",
+    "tool_calls": "debug.tool_calls",
+    "observations": "debug.observations",
+    "metadata": "debug.metadata"
+  },
+  "timeout": 60
+}

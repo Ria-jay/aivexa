@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aivexa"
+version = "0.4.0"
+description = "AI safety and security evaluation through controlled, evidence-backed experiments."
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "Apache-2.0"}
+
+authors = [
+    {name = "AIVEXA"}
+]
+
+keywords = [
+    "ai-security",
+    "ai-safety",
+    "llm-security",
+    "llm-evaluation",
+    "prompt-injection",
+    "ai-red-teaming",
+    "adversarial-ai",
+    "security-research"
+]
+
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Security",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence"
+]
+
+[project.scripts]
+aivexa = "aivexa.cli.main:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0"
+]
+
+[tool.setuptools.packages.find]
+include = ["aivexa*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra"
