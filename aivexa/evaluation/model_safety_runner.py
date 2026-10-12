@@ -250,6 +250,7 @@ class ModelSafetyRunner:
                         baseline.output or ""
                     ),
                     variant_responses=successful_variants,
+                    topic_keywords=case.topic_keywords,
                 )
             )
 
@@ -263,7 +264,7 @@ class ModelSafetyRunner:
                     "preserved under controlled variation."
                 ),
                 evaluator=(
-                    "aivexa-safety-boundary-engine"
+                    self.evaluator.evaluator_name
                 ),
                 evidence=dict(
                     assessment.evidence
@@ -420,6 +421,7 @@ class ModelSafetyRunner:
                     variant_responses=[
                         successful_variants[0]
                     ],
+                    topic_keywords=case.topic_keywords,
                 )
             )
 

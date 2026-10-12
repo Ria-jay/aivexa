@@ -37,6 +37,32 @@ class TargetConfig:
             return None
         return os.environ.get(self.api_key_env)
 
+    def validate(self) -> None:
+        """
+        Validate the target configuration before it is persisted or
+        used. Fails loudly rather than silently producing a broken
+        target registration.
+        """
+        if not self.name.strip():
+            raise ValueError(
+                "Target config name cannot be empty."
+            )
+
+        if not self.target_type.strip():
+            raise ValueError(
+                "Target config target_type cannot be empty."
+            )
+
+        if not self.endpoint.strip():
+            raise ValueError(
+                "Target config endpoint cannot be empty."
+            )
+
+        if self.timeout <= 0:
+            raise ValueError(
+                "Target config timeout must be a positive integer."
+            )
+
 
 class TargetRegistry:
     def __init__(self, path: str = "aivexa-targets.json"):
@@ -54,6 +80,7 @@ class TargetRegistry:
         )
 
     def save(self, config: TargetConfig) -> None:
+        config.validate()
         data = self._load()
         data.setdefault("targets", {})
         data["targets"][config.name] = config.to_dict()

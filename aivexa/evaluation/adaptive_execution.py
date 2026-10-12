@@ -4,6 +4,7 @@ from typing import Any
 from aivexa.evaluation.adaptive import AdaptiveProbe
 from aivexa.evaluation.safety_boundary_engine import SafetyBoundaryEngine
 from aivexa.evaluation.models import Evaluation
+from aivexa.evidence.models import Evidence
 from aivexa.experiments.models import Experiment
 from aivexa.experiments.runner import ExperimentRunner
 from aivexa.comparison.behavior import compare_responses
@@ -69,12 +70,28 @@ class AdaptiveExperimentExecutor:
         baseline_prompt: str,
         adaptive_prompt: str,
         generation_options: dict | None = None,
+        baseline_output: str | None = None,
     ) -> AdaptiveExecution:
-        baseline = self.runner.run(
-            experiment_id=f"{experiment.experiment_id}-BASELINE",
-            prompt=baseline_prompt,
-            generation_options=generation_options,
-        )
+        if baseline_output is None:
+            baseline = self.runner.run(
+                experiment_id=f"{experiment.experiment_id}-BASELINE",
+                prompt=baseline_prompt,
+                generation_options=generation_options,
+            )
+            baseline_output = baseline.output_data
+        else:
+            # Reuse the baseline captured earlier in the adaptive run so
+            # each cycle represents one new controlled experiment rather
+            # than re-executing an unchanged baseline.
+            baseline = Evidence(
+                experiment_id=f"{experiment.experiment_id}-BASELINE",
+                input_data=baseline_prompt,
+                output_data=baseline_output,
+                observations=[
+                    "Baseline reused from an earlier adaptive cycle."
+                ],
+                metadata={"reused": True},
+            )
 
         adaptive = self.runner.run(
             experiment_id=experiment.experiment_id,

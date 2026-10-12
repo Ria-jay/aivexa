@@ -99,11 +99,31 @@ class AdaptiveController:
 
         current_source_id = source_experiment_id
 
+        # The originally supplied baseline and adaptive prompts have
+        # already been observed, so they are not repeated as "new"
+        # evidence. This prevents an adaptive loop from re-running the
+        # same input under a different experiment identifier.
+        tried_prompts: set[str] = {
+            baseline_prompt.strip(),
+            adaptive_prompt.strip(),
+        }
+
+        baseline_output: str | None = None
+
         for cycle_number in range(1, self.max_cycles + 1):
             planned_probe = self.planner.plan(
                 assessment,
                 current_source_id,
+                source_prompt=adaptive_prompt,
+                tried_prompts=tuple(tried_prompts),
             )
+
+            if not planned_probe.prompt:
+                return AdaptiveRun(
+                    source_experiment_id=source_experiment_id,
+                    cycles=tuple(cycles),
+                    stopping_reason="NO_NEW_PROBE",
+                )
 
             probe = AdaptiveProbe(
                 probe_id=(
@@ -121,12 +141,13 @@ class AdaptiveController:
                     "cycle_number": cycle_number,
                     "source_experiment_id": current_source_id,
                 },
+                prompt=planned_probe.prompt,
             )
 
             adaptive_experiment = self.builder.build(
                 probe=probe,
                 target=target,
-                prompt=adaptive_prompt,
+                prompt=probe.prompt,
                 source_experiment_id=current_source_id,
             )
 
@@ -134,9 +155,14 @@ class AdaptiveController:
                 experiment=adaptive_experiment.experiment,
                 probe=probe,
                 baseline_prompt=baseline_prompt,
-                adaptive_prompt=adaptive_prompt,
+                adaptive_prompt=probe.prompt,
                 generation_options=generation_options,
+                baseline_output=baseline_output,
             )
+
+            baseline_output = execution.baseline_output
+
+            tried_prompts.add(probe.prompt.strip())
 
             self.persistence.save(execution)
 

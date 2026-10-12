@@ -37,7 +37,7 @@ from aivexa.targets.profile_http import (
 )
 
 
-VERSION = "0.4.0"
+VERSION = "0.5.0"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -73,6 +73,71 @@ def build_parser() -> argparse.ArgumentParser:
         help="Validate an authorized target profile.",
     )
     validate.add_argument("profile")
+
+    target_list = target_sub.add_parser(
+        "list",
+        help="List configured targets in the target registry.",
+    )
+    target_list.add_argument(
+        "--config",
+        default="aivexa-targets.json",
+    )
+    target_list.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+    )
+
+    target_show = target_sub.add_parser(
+        "show",
+        help="Show one configured target.",
+    )
+    target_show.add_argument("name")
+    target_show.add_argument(
+        "--config",
+        default="aivexa-targets.json",
+    )
+
+    target_add = target_sub.add_parser(
+        "add",
+        help="Add or update a target in the registry.",
+    )
+    target_add.add_argument("name")
+    target_add.add_argument(
+        "--type",
+        required=True,
+        dest="target_type",
+        help="Target provider type (e.g. gemini, ollama).",
+    )
+    target_add.add_argument(
+        "--endpoint",
+        required=True,
+    )
+    target_add.add_argument("--model", default="")
+    target_add.add_argument(
+        "--api-key-env",
+        default="",
+        help="Environment variable that holds the API key.",
+    )
+    target_add.add_argument(
+        "--timeout",
+        type=int,
+        default=120,
+    )
+    target_add.add_argument(
+        "--config",
+        default="aivexa-targets.json",
+    )
+
+    target_remove = target_sub.add_parser(
+        "remove",
+        help="Remove a configured target.",
+    )
+    target_remove.add_argument("name")
+    target_remove.add_argument(
+        "--config",
+        default="aivexa-targets.json",
+    )
 
     adversarial_parser = subparsers.add_parser(
         "adversarial",
@@ -279,6 +344,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     finding.add_argument(
         "--output",
+    )
+
+    model_safety_report = report_sub.add_parser(
+        "model-safety",
+        help=(
+            "Generate a report from a model-safety results JSON file."
+        ),
+    )
+    model_safety_report.add_argument("results")
+    model_safety_report.add_argument(
+        "--output",
+        default="reports/model_safety_report.md",
     )
 
     return parser
@@ -538,9 +615,9 @@ def _run_model_safety(args) -> int:
     return 0
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     try:
         if args.command == "target":
@@ -562,6 +639,98 @@ def main() -> int:
                 )
                 print(
                     f"Authorization: {profile.authorization_note}"
+                )
+                return 0
+
+            if args.target_command == "list":
+                from aivexa.targets.config import (
+                    TargetRegistry,
+                )
+
+                targets = TargetRegistry(
+                    args.config
+                ).list()
+
+                if args.json_output:
+                    print(
+                        json.dumps(
+                            [
+                                config.to_dict()
+                                for config in targets
+                            ],
+                            indent=2,
+                        )
+                    )
+                    return 0
+
+                if not targets:
+                    print(
+                        "No targets are configured in "
+                        f"{args.config}."
+                    )
+                    return 0
+
+                for config in targets:
+                    print(
+                        f"{config.name}: {config.target_type} "
+                        f"({config.endpoint})"
+                    )
+
+                return 0
+
+            if args.target_command == "show":
+                from aivexa.targets.config import (
+                    TargetRegistry,
+                )
+
+                config = TargetRegistry(
+                    args.config
+                ).get(args.name)
+
+                print(
+                    json.dumps(
+                        config.to_dict(),
+                        indent=2,
+                    )
+                )
+                return 0
+
+            if args.target_command == "add":
+                from aivexa.targets.config import (
+                    TargetConfig,
+                    TargetRegistry,
+                )
+
+                registry = TargetRegistry(args.config)
+
+                registry.save(
+                    TargetConfig(
+                        name=args.name,
+                        target_type=args.target_type,
+                        endpoint=args.endpoint,
+                        model=args.model,
+                        api_key_env=args.api_key_env,
+                        timeout=args.timeout,
+                    )
+                )
+
+                print(
+                    f"SAVED: {args.name} -> {args.config}"
+                )
+                return 0
+
+            if args.target_command == "remove":
+                from aivexa.targets.config import (
+                    TargetRegistry,
+                )
+
+                TargetRegistry(args.config).delete(
+                    args.name
+                )
+
+                print(
+                    f"REMOVED: {args.name} from "
+                    f"{args.config}"
                 )
                 return 0
 
@@ -690,6 +859,19 @@ def main() -> int:
                 else:
                     print(report)
 
+                return 0
+
+            if args.report_command == "model-safety":
+                from aivexa.reporting.model_safety_report import (
+                    generate_model_safety_report,
+                )
+
+                report_path = generate_model_safety_report(
+                    results_file=args.results,
+                    report_file=args.output,
+                )
+
+                print(f"REPORT: {report_path}")
                 return 0
 
         parser.error("Unsupported command.")

@@ -390,21 +390,16 @@ class AdversarialWorkflow:
             }
         )
 
-        class AssessmentRecord:
-            pass
-
-        assessment = AssessmentRecord()
-        assessment.assessment_id = (
-            f"{experiment_id}-ASSESSMENT"
+        self.database.save_evaluation(
+            experiment_id=experiment_id,
+            assessment_id=f"{experiment_id}-ASSESSMENT",
+            evaluation=evaluation,
+            evidence={
+                "adversarial_case": case.case_id,
+                "target_profile": profile.target_name,
+                "case": case.to_dict(),
+            },
         )
-        assessment.experiment_id = experiment_id
-        assessment.result = evaluation.result
-        assessment.confidence = evaluation.confidence
-        assessment.rationale = evaluation.rationale
-        assessment.evidence = evaluation.evidence
-        assessment.evaluations = (evaluation,)
-
-        self.database.save_assessment(assessment)
 
     def _finding(
         self,

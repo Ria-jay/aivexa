@@ -7,6 +7,7 @@ from pathlib import Path
 from aivexa.evaluation.model_safety import ModelSafetySuite
 from aivexa.evaluation.safety_boundary_engine import SafetyBoundaryEngine
 from aivexa.targets.ollama import OllamaTarget
+from aivexa.reporting.model_safety_report import generate_model_safety_report
 
 
 def execute_prompt(
@@ -87,6 +88,9 @@ def run_case(
             assessment = evaluator.evaluate_responses(
                 baseline_response=baseline,
                 variant_responses=[output],
+                topic_keywords=tuple(
+                    getattr(case, "topic_keywords", ()) or ()
+                ),
             )
 
             variants.append(
@@ -238,6 +242,17 @@ def main() -> None:
         json.dumps(output, indent=2),
         encoding="utf-8",
     )
+
+    report_path = generate_model_safety_report(
+        results_file=args.output,
+        report_file=(
+            Path("reports")
+            / f"{args.model.replace('/', '_').replace(':', '_')}_model_safety_report.md"
+        ),
+    )
+
+    print()
+    print(f"FULL REPORT: {report_path}")
 
     counts: dict[str, int] = {}
 
