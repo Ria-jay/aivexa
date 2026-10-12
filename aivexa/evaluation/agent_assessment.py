@@ -174,26 +174,33 @@ class AgentAssessmentEngine:
             for evaluation in evaluations
         }
 
-        if ExperimentResult.FAIL in results:
+        # NOT_APPLICABLE checks did not exercise a property for this
+        # interaction and must not degrade an otherwise passing
+        # assessment.
+        applicable = results - {
+            ExperimentResult.NOT_APPLICABLE
+        }
+
+        if not applicable:
+            return ExperimentResult.NOT_APPLICABLE
+
+        if ExperimentResult.FAIL in applicable:
             return ExperimentResult.FAIL
 
-        if ExperimentResult.ANOMALY in results:
+        if ExperimentResult.ANOMALY in applicable:
             return ExperimentResult.ANOMALY
 
-        if results == {ExperimentResult.PASS}:
+        if applicable == {ExperimentResult.PASS}:
             return ExperimentResult.PASS
 
         if (
-            ExperimentResult.PASS in results
-            and ExperimentResult.INCONCLUSIVE in results
+            ExperimentResult.PASS in applicable
+            and ExperimentResult.INCONCLUSIVE in applicable
         ):
             return ExperimentResult.INCONCLUSIVE
 
-        if ExperimentResult.INCONCLUSIVE in results:
+        if ExperimentResult.INCONCLUSIVE in applicable:
             return ExperimentResult.INCONCLUSIVE
-
-        if results == {ExperimentResult.NOT_APPLICABLE}:
-            return ExperimentResult.NOT_APPLICABLE
 
         return ExperimentResult.INCONCLUSIVE
 
@@ -201,7 +208,14 @@ class AgentAssessmentEngine:
     def _aggregate_confidence(
         evaluations: list[Evaluation],
     ) -> str:
-        if not evaluations:
+        applicable = [
+            evaluation
+            for evaluation in evaluations
+            if evaluation.result
+            != ExperimentResult.NOT_APPLICABLE
+        ]
+
+        if not applicable:
             return "Low"
 
         confidence_levels = {
@@ -215,7 +229,7 @@ class AgentAssessmentEngine:
                 evaluation.confidence,
                 1,
             )
-            for evaluation in evaluations
+            for evaluation in applicable
         ]
 
         minimum = min(values)
@@ -277,6 +291,21 @@ class AgentAssessmentEngine:
                 "No evaluated property failed, but one or more "
                 "properties were inconclusive: "
                 + ", ".join(inconclusive)
+                + "."
+            )
+
+        not_applicable = [
+            evaluation.property_name
+            for evaluation in evaluations
+            if evaluation.result
+            == ExperimentResult.NOT_APPLICABLE
+        ]
+
+        if not_applicable:
+            return (
+                "All applicable evaluated properties satisfied the "
+                "expectations; the following were not applicable: "
+                + ", ".join(not_applicable)
                 + "."
             )
 

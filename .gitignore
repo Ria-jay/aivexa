@@ -35,6 +35,10 @@ reports/
 .env.*
 *.secret
 
+# Local runtime configuration and corpora
+aivexa-targets.json
+knowledge-corpus.jsonl
+
 # IDE
 .vscode/
 .idea/

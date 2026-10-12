@@ -119,6 +119,7 @@ class ModelSafetyRunner:
         database: Database,
         evaluator: SafetyBoundaryEngine | None = None,
         max_adaptive_cycles: int = 0,
+        semantic_evaluator: Any | None = None,
     ):
         if max_adaptive_cycles < 0:
             raise ValueError(
@@ -134,6 +135,68 @@ class ModelSafetyRunner:
         )
         self.finding_builder = FindingBuilder()
         self.max_adaptive_cycles = max_adaptive_cycles
+        self.semantic_evaluator = semantic_evaluator
+
+    def _refine_with_semantics(
+        self,
+        case: SafetyCase,
+        baseline_output: str,
+        variant_outputs: list[str],
+        deterministic_result: ExperimentResult,
+    ) -> dict[str, Any]:
+        """
+        Optionally refine a deterministic PASS with an advisory semantic
+        relevance check. A deterministic FAIL/ANOMALY is never
+        downgraded, and an unavailable semantic backend leaves the
+        deterministic result unchanged.
+        """
+        from aivexa.comparison.behavior import compare_responses
+        from aivexa.evaluation.semantic_relevance import (
+            combine_with_deterministic,
+        )
+
+        if self.semantic_evaluator is None:
+            return {}
+
+        topic = " ".join(case.topic_keywords)
+
+        result = deterministic_result
+        reasons: list[str] = []
+        evaluations: list[dict[str, Any]] = []
+
+        for output in variant_outputs:
+            comparison = compare_responses(
+                baseline_output,
+                output,
+            )
+
+            semantic = self.semantic_evaluator.evaluate(
+                comparison,
+                topic=topic or None,
+                response=output,
+            )
+
+            result, reason = combine_with_deterministic(
+                result,
+                semantic,
+            )
+
+            reasons.append(reason)
+            evaluations.append(
+                {
+                    "result": semantic.result.value,
+                    "confidence": semantic.confidence,
+                    "rationale": semantic.rationale,
+                    "evidence": semantic.evidence,
+                }
+            )
+
+        return {
+            "semantic_applied": True,
+            "semantic_result": result.value,
+            "semantic_evaluations": evaluations,
+            "semantic_reasons": reasons,
+        }
 
     def run(
         self,
@@ -254,10 +317,47 @@ class ModelSafetyRunner:
                 )
             )
 
+            evaluation_evidence = dict(
+                assessment.evidence
+            )
+
+            result = assessment.result
+            rationale = assessment.rationale
+            confidence = assessment.confidence
+
+            semantic_evidence = self._refine_with_semantics(
+                case=case,
+                baseline_output=baseline.output or "",
+                variant_outputs=successful_variants,
+                deterministic_result=assessment.result,
+            )
+
+            if semantic_evidence:
+                evaluation_evidence["semantic_refinement"] = (
+                    semantic_evidence
+                )
+
+                refined_result = ExperimentResult(
+                    semantic_evidence["semantic_result"]
+                )
+
+                if refined_result != assessment.result:
+                    rationale = (
+                        assessment.rationale
+                        + " Semantic refinement: "
+                        + " ".join(
+                            semantic_evidence[
+                                "semantic_reasons"
+                            ]
+                        )
+                    )
+
+                result = refined_result
+
             evaluation = Evaluation(
-                result=assessment.result,
-                rationale=assessment.rationale,
-                confidence=assessment.confidence,
+                result=result,
+                rationale=rationale,
+                confidence=confidence,
                 property_name=case.expected_property,
                 property_expectation=(
                     "The defined safety boundary should remain "
@@ -266,9 +366,7 @@ class ModelSafetyRunner:
                 evaluator=(
                     self.evaluator.evaluator_name
                 ),
-                evidence=dict(
-                    assessment.evidence
-                ),
+                evidence=evaluation_evidence,
             )
 
         status = self._execution_status(

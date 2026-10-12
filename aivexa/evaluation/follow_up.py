@@ -12,6 +12,7 @@ class FollowUpExperiment:
     reason: str
     priority: str
     suggested_variants: tuple[str, ...]
+    references: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -21,6 +22,7 @@ class FollowUpExperiment:
             "reason": self.reason,
             "priority": self.priority,
             "suggested_variants": list(self.suggested_variants),
+            "references": list(self.references),
         }
 
 
@@ -30,11 +32,40 @@ class FollowUpPlanner:
 
     The planner does not execute attacks. It converts evaluation
     uncertainty or failure into a controlled next experiment.
+
+    An optional knowledge corpus can be supplied. When present, related
+    research entries are attached to the plan so the link between
+    research material and the decision it informed is traceable.
     """
+
+    def __init__(self, knowledge: Any | None = None):
+        self.knowledge = knowledge
+
+    def _references(
+        self,
+        terms: tuple[str, ...],
+    ) -> tuple[str, ...]:
+        if self.knowledge is None:
+            return ()
+
+        seen: list[str] = []
+
+        for term in terms:
+            for entry in self.knowledge.search(
+                query=term,
+                limit=3,
+            ):
+                if entry.entry_id not in seen:
+                    seen.append(entry.entry_id)
+
+        return tuple(seen[:5])
 
     def plan(
         self,
         assessment: BoundaryAssessment,
+        property_name: str = (
+            "safety_boundary_preservation"
+        ),
     ) -> FollowUpExperiment:
         evidence = assessment.evidence
         result = assessment.result.value
@@ -54,6 +85,9 @@ class FollowUpPlanner:
                     "Repeat with equivalent wording.",
                     "Repeat with a minimal contextual change.",
                 ),
+                references=self._references(
+                    (property_name, "actionable", "procedure")
+                ),
             )
 
         if evidence.get("procedural_variants", 0) > 0:
@@ -70,6 +104,9 @@ class FollowUpPlanner:
                     "Repeat the triggering wording.",
                     "Use a semantic paraphrase.",
                     "Use a minimal framing variation.",
+                ),
+                references=self._references(
+                    (property_name, "procedural")
                 ),
             )
 
@@ -88,6 +125,9 @@ class FollowUpPlanner:
                     "Paraphrase the same intervention.",
                     "Remove one contextual variable.",
                 ),
+                references=self._references(
+                    (property_name, "refusal", "boundary")
+                ),
             )
 
         if evidence.get("contradictory_variants", 0) > 0:
@@ -104,6 +144,9 @@ class FollowUpPlanner:
                     "Repeat the triggering variant.",
                     "Use a shorter intervention.",
                     "Use a semantic paraphrase.",
+                ),
+                references=self._references(
+                    (property_name, "refusal", "contradiction")
                 ),
             )
 
@@ -122,6 +165,9 @@ class FollowUpPlanner:
                     "Add a minimal framing variation.",
                     "Repeat the baseline.",
                 ),
+                references=self._references(
+                    (property_name, "anomaly")
+                ),
             )
 
         if result == "INCONCLUSIVE":
@@ -139,6 +185,9 @@ class FollowUpPlanner:
                     "Add a semantic paraphrase.",
                     "Add a controlled framing variation.",
                 ),
+                references=self._references(
+                    (property_name,)
+                ),
             )
 
         return FollowUpExperiment(
@@ -154,5 +203,8 @@ class FollowUpPlanner:
                 "Repeat the baseline.",
                 "Use a semantic paraphrase.",
                 "Use a minimal framing variation.",
+            ),
+            references=self._references(
+                (property_name,)
             ),
         )

@@ -48,6 +48,7 @@ class AdaptiveExperimentBuilder:
             intervention=probe.intervention_type,
             context={
                 "adaptive": True,
+                "workflow": "adaptive",
                 "source_experiment_id": source_experiment_id,
                 "probe": probe.to_dict(),
                 "prompt": prompt,

@@ -13,6 +13,12 @@ from aivexa.evaluation.context_boundary import (
 from aivexa.evaluation.data_boundary import (
     DataBoundaryEvaluator,
 )
+from aivexa.evaluation.confirmation import (
+    ConfirmationBoundaryEvaluator,
+)
+from aivexa.evaluation.groundedness import (
+    GroundednessEvaluator,
+)
 from aivexa.evaluation.identity_boundary import (
     IdentityBoundaryEvaluator,
 )
@@ -81,6 +87,14 @@ def build_default_security_checks() -> list[AssessmentCheck]:
         AssessmentCheck(
             name="output_handling",
             evaluator=OutputHandlingEvaluator(),
+        ),
+        AssessmentCheck(
+            name="groundedness",
+            evaluator=GroundednessEvaluator(),
+        ),
+        AssessmentCheck(
+            name="confirmation",
+            evaluator=ConfirmationBoundaryEvaluator(),
         ),
     ]
 
