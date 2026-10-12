@@ -191,3 +191,59 @@ def test_cli_report_experiment_missing_is_error(tmp_path, capsys):
 
     assert exit_code == 1
     assert "AIVEXA ERROR" in capsys.readouterr().err
+
+
+def test_cli_research_refresh_and_status(tmp_path, capsys):
+    import json
+
+    source = tmp_path / "source.jsonl"
+    source.write_text(
+        json.dumps(
+            {
+                "entry_id": "CWE-79",
+                "title": "XSS",
+                "source": "fixture",
+                "summary": "Cross-site scripting.",
+                "retrieved_at": "2026-01-01T00:00:00+00:00",
+                "cwes": ["CWE-79"],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    corpus = tmp_path / "corpus.jsonl"
+
+    exit_code = main(
+        [
+            "research",
+            "refresh",
+            "--source",
+            "jsonl",
+            "--file",
+            str(source),
+            "--corpus",
+            str(corpus),
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["success"] is True
+    assert payload["added"] == 1
+
+    exit_code = main(
+        [
+            "research",
+            "knowledge-status",
+            "--corpus",
+            str(corpus),
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["entries"] == 1
+    assert payload["sources"] == {"fixture": 1}

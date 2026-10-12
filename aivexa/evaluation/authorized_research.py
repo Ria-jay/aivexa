@@ -29,6 +29,10 @@ from aivexa.evaluation.security_investigation import (
 from aivexa.evaluation.security_investigation_persistence import (
     SecurityInvestigationPersistence,
 )
+from aivexa.evaluation.system_adaptive import (
+    SystemAdaptiveController,
+    SystemAdaptiveRun,
+)
 from aivexa.experiments.application_runner import (
     ApplicationExperimentRunner,
 )
@@ -69,9 +73,16 @@ class AuthorizedResearchRunner:
         self,
         target: AIApplicationTarget,
         database: Database,
+        max_adaptive_cycles: int = 0,
     ):
+        if max_adaptive_cycles < 0:
+            raise ValueError(
+                "max_adaptive_cycles cannot be negative."
+            )
+
         self.target = target
         self.database = database
+        self.max_adaptive_cycles = max_adaptive_cycles
         self.assessment_engine = AgentAssessmentEngine()
         self.finding_builder = FindingBuilder()
         self.follow_up_planner = SecurityFollowUpPlanner()
@@ -184,6 +195,88 @@ class AuthorizedResearchRunner:
             finding=finding,
             follow_up=follow_up,
             investigation=investigation,
+        )
+
+    def investigate(
+        self,
+        source_experiment_id: str,
+        source_input: str,
+        checks: list[AssessmentCheck],
+        context: dict[str, Any] | None = None,
+        authorization_context: dict[str, Any] | None = None,
+        baseline_output: str | None = None,
+        max_cycles: int | None = None,
+    ) -> SystemAdaptiveRun:
+        """
+        Execute a bounded, evidence-driven adaptive follow-up for a
+        system target and persist each executed follow-up experiment.
+        """
+        if baseline_output is None:
+            row = self.database.connection.execute(
+                """
+                SELECT output_data
+                FROM experiments
+                WHERE experiment_id = ?
+                """,
+                (source_experiment_id,),
+            ).fetchone()
+
+            if row is not None:
+                baseline_output = row[0]
+
+        source_finding = None
+
+        finding_row = self.database.connection.execute(
+            """
+            SELECT
+                finding_id,
+                assessment_id,
+                experiment_id,
+                title,
+                result,
+                confidence,
+                affected_properties,
+                rationale,
+                evidence
+            FROM findings
+            WHERE experiment_id = ?
+            ORDER BY created_at
+            LIMIT 1
+            """,
+            (source_experiment_id,),
+        ).fetchone()
+
+        if finding_row is not None:
+            source_finding = Finding(
+                finding_id=finding_row[0],
+                assessment_id=finding_row[1],
+                experiment_id=finding_row[2],
+                title=finding_row[3],
+                result=ExperimentResult(finding_row[4]),
+                confidence=finding_row[5],
+                affected_properties=json.loads(finding_row[6]),
+                rationale=finding_row[7],
+                evidence=json.loads(finding_row[8]),
+            )
+
+        controller = SystemAdaptiveController(
+            target=self.target,
+            database=self.database,
+            checks=checks,
+            max_cycles=(
+                max_cycles
+                if max_cycles is not None
+                else self.max_adaptive_cycles
+            ),
+        )
+
+        return controller.run(
+            source_experiment_id=source_experiment_id,
+            source_input=source_input,
+            baseline_output=baseline_output,
+            context=context,
+            authorization_context=authorization_context,
+            source_finding=source_finding,
         )
 
     def reproduce(

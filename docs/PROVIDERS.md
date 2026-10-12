@@ -55,10 +55,22 @@ context, metadata, and observations.
 - No credentials are stored in code, configuration committed to the
   repository, or reports.
 
+## Advisory sources
+
+| Source | Adapter | Notes |
+|---|---|---|
+| NVD CVE API 2.0 | `NvdCveSource` | Live HTTPS retrieval, pagination, incremental last-modified refresh, optional `NVD_API_KEY`, rate-limit handling |
+| Local JSONL | `JsonlCorpusSource` | Offline fixtures / curated corpora |
+| Generic HTTP JSON | `HttpCorpusSource` | Any endpoint returning a JSON list of entries |
+
+Refresh is orchestrated by `aivexa.knowledge.refresh.refresh_corpus` and
+exposed via `aivexa research refresh`. A refresh is only reported
+successful when entries were actually retrieved; partial or failed
+refreshes are reported explicitly.
+
 ## Not supported (and not claimed)
 
 - Providers without an implemented adapter are rejected.
-- Live CVE/advisory feeds are not bundled; `HttpCorpusSource` provides
-  the retrieval interface but requires a reachable, correctly formatted
-  source and does not claim freshness without a successful fetch.
+- Advisory sources other than NVD are not bundled; the `CorpusSource`
+  protocol and `HttpCorpusSource` allow additional feeds to be added.
 - No cloud deployment, dashboard, or GUI is provided.

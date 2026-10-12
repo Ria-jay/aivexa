@@ -68,13 +68,20 @@ same interaction:
 
 authorization, data boundary, action boundary, retrieval integrity,
 RAG security, context boundary, tool invocation, tool result boundary,
-side effect, identity boundary, output handling, groundedness, and
-confirmation.
+side effect, identity boundary, output handling, groundedness,
+confirmation, and sequence-aware agent trace boundary.
 
 Each evaluator returns its own result and evidence. The aggregate never
 replaces the individual results. `NOT_APPLICABLE` checks are excluded
 from the aggregate so an inapplicable property cannot degrade an
 otherwise passing assessment.
+
+`SystemAdaptiveController` provides a bounded, evidence-driven
+follow-up loop for application/RAG/agent targets: it plans
+scope-preserving input variations, executes them through the target,
+re-evaluates with the same checks, persists experiments and
+assessments, and records reproduction status against a source finding.
+Execution failures are recorded as `INCONCLUSIVE`, never `PASS`.
 
 ## Persistence and lineage
 
@@ -99,6 +106,13 @@ evaluator.
 from the experiment database. Follow-up plans can attach related
 corpus entry IDs so the research material that informed a decision
 remains traceable.
+
+`NvdCveSource` retrieves CVE records from the live NVD CVE API 2.0 with
+pagination, incremental last-modified refresh, rate-limit handling, and
+stable identifiers. `refresh_corpus` ingests retrieved entries and
+produces an explicit `RefreshReport` (added/updated/unchanged, next
+start index, errors) so a partial or failed refresh is never presented
+as a successful one.
 
 ## Boundaries
 

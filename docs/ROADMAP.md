@@ -94,16 +94,24 @@ Last reconciled against commit: see `git log -1`.
 - [x] Excessive permissions / sensitive-data exposure.
 - [x] Consequential-action confirmation boundary (`confirmation.py`).
 - [x] Cross-component boundaries (model/tools/data/application).
-- [x] Controlled mock/local test environments.
+- [x] Sequence-aware agent trace policy evaluation, including tool
+      allow-lists, argument scope, untrusted instruction sources,
+      confirmation ordering, and untrusted tool results
+      (`evaluation/trace_boundary.py`, `evidence/agent.py`).
+- [x] Controlled mock/local test environments, including a scripted
+      mock agent target (`targets/mock_agent.py`).
 
 ## G. Adaptive evaluation across model and system targets
 
 - [x] Adaptive investigation integrated with model evaluations.
 - [x] Target capabilities → case selection.
 - [x] Hypotheses/observations → experiments → evidence → findings.
-- [~] Adaptive investigation for system/application targets (the deterministic
-      planner is shared; application follow-ups are created but not looped
-      through the model adaptive controller — documented limitation).
+- [x] Adaptive investigation for system/application/RAG/agent targets
+      (`evaluation/system_adaptive.py`): plans, executes, evaluates,
+      persists, and reproduces follow-ups with scope enforcement,
+      budgets, de-duplication, and stopping conditions.
+- [x] End-to-end test proving a system observation produces an executed
+      follow-up experiment, evaluation, and persisted outcome.
 
 ## H. Research corpus and knowledge integration
 
@@ -112,9 +120,11 @@ Last reconciled against commit: see `git log -1`.
 - [x] Search/retrieval that informs hypotheses and follow-up experiments.
 - [x] Traceable links between corpus material and decisions.
 - [x] Resilient parsing and explicit failure reporting.
-- [~] Live CVE/advisory refresh requires network access and an external
-      source; the loader interface is real and tested with fixtures, but no
-      live feed is claimed as current.
+- [x] Live NVD CVE API 2.0 refresh adapter (`knowledge/nvd.py`) with
+      pagination, incremental last-modified refresh, optional API key,
+      timeouts, bounded retries, rate-limit handling, and resumable
+      start indices; refresh is orchestrated by `knowledge/refresh.py`.
+- [x] Live NVD retrieval verified in this environment (see README).
 - [x] No duplicate database — corpus is file-backed and separate from the
       experiment database.
 
@@ -183,10 +193,14 @@ Last reconciled against commit: see `git log -1`.
 2. General relevance without a declared topic cannot be assessed
    deterministically; relevance checking is enabled only when a case
    supplies `topic_keywords`.
-3. Live CVE/advisory ingestion requires network access/credentials and is
-   not claimed to be current; the corpus loader interface is real and
-   fixture-tested.
-4. Adaptive investigation loops are integrated for model targets; system
-   target follow-ups are planned and persisted but not auto-looped.
+3. Live NVD CVE refresh is implemented and was verified against the live
+   NVD API 2.0 in this environment. Other advisory sources (CISA KEV, GHSA,
+   vendor feeds) are not bundled; `HttpCorpusSource` plus the source
+   protocol allow them to be added. A refresh is only reported successful
+   when entries were actually retrieved.
+4. Adaptive investigation loops are integrated for both model targets and
+   system/application/RAG/agent targets.
 5. Provider support is limited to targets that can actually be exercised:
    Ollama, OpenAI-compatible HTTP, and the Gemini REST application adapter.
+6. Tool-use evaluation works on observable tool calls/traces supplied by
+   the target; AIVEXA does not execute arbitrary agent tools itself.

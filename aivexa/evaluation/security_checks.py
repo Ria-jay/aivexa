@@ -19,6 +19,9 @@ from aivexa.evaluation.confirmation import (
 from aivexa.evaluation.groundedness import (
     GroundednessEvaluator,
 )
+from aivexa.evaluation.trace_boundary import (
+    AgentTraceBoundaryEvaluator,
+)
 from aivexa.evaluation.identity_boundary import (
     IdentityBoundaryEvaluator,
 )
@@ -95,6 +98,10 @@ def build_default_security_checks() -> list[AssessmentCheck]:
         AssessmentCheck(
             name="confirmation",
             evaluator=ConfirmationBoundaryEvaluator(),
+        ),
+        AssessmentCheck(
+            name="trace_boundary",
+            evaluator=AgentTraceBoundaryEvaluator(),
         ),
     ]
 

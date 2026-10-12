@@ -43,7 +43,7 @@ from aivexa.evaluation.model_security_runner import (
 )
 
 
-VERSION = "0.6.0"
+VERSION = "0.7.0"
 
 
 def _build_model_target(args):
@@ -508,6 +508,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--baseline-output",
     )
     run.add_argument(
+        "--adaptive-cycles",
+        type=int,
+        default=0,
+        help=(
+            "Execute up to N adaptive follow-up experiments when a "
+            "finding is produced."
+        ),
+    )
+    run.add_argument(
         "--json",
         action="store_true",
         dest="json_output",
@@ -657,6 +666,82 @@ def build_parser() -> argparse.ArgumentParser:
         default=10,
     )
     research_knowledge.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+    )
+
+    research_refresh = research_sub.add_parser(
+        "refresh",
+        help="Refresh the knowledge corpus from an advisory source.",
+    )
+    research_refresh.add_argument(
+        "--source",
+        choices=["nvd", "jsonl", "http"],
+        default="nvd",
+    )
+    research_refresh.add_argument(
+        "--corpus",
+        default="knowledge-corpus.jsonl",
+    )
+    research_refresh.add_argument(
+        "--file",
+        help="Path to a JSONL file (source=jsonl).",
+    )
+    research_refresh.add_argument(
+        "--url",
+        help="URL to an HTTP JSON source (source=http).",
+    )
+    research_refresh.add_argument(
+        "--api-key-env",
+        default="NVD_API_KEY",
+    )
+    research_refresh.add_argument(
+        "--since",
+        help=(
+            "Incremental refresh start (ISO-8601 last-modified)."
+        ),
+    )
+    research_refresh.add_argument(
+        "--max-pages",
+        type=int,
+        default=1,
+    )
+    research_refresh.add_argument(
+        "--start-index",
+        type=int,
+        default=0,
+    )
+    research_refresh.add_argument(
+        "--results-per-page",
+        type=int,
+        default=100,
+    )
+    research_refresh.add_argument(
+        "--timeout",
+        type=int,
+        default=60,
+    )
+    research_refresh.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+    )
+
+    research_status = research_sub.add_parser(
+        "knowledge-status",
+        help="Report corpus size and staleness.",
+    )
+    research_status.add_argument(
+        "--corpus",
+        default="knowledge-corpus.jsonl",
+    )
+    research_status.add_argument(
+        "--max-age-days",
+        type=int,
+        default=30,
+    )
+    research_status.add_argument(
         "--json",
         action="store_true",
         dest="json_output",
@@ -1202,6 +1287,137 @@ def _run_research(args) -> int:
             )
         return 0
 
+    if args.research_command == "refresh":
+        from aivexa.knowledge.corpus import KnowledgeCorpus
+        from aivexa.knowledge.nvd import NvdCveSource
+        from aivexa.knowledge.refresh import refresh_corpus
+        from aivexa.knowledge.sources import (
+            HttpCorpusSource,
+            JsonlCorpusSource,
+        )
+
+        if args.source == "nvd":
+            source = NvdCveSource(
+                api_key_env=args.api_key_env,
+                timeout=args.timeout,
+            )
+        elif args.source == "jsonl":
+            if not args.file:
+                raise ValueError(
+                    "--file is required for source=jsonl"
+                )
+            source = JsonlCorpusSource("jsonl", args.file)
+        else:
+            if not args.url:
+                raise ValueError(
+                    "--url is required for source=http"
+                )
+            source = HttpCorpusSource(
+                "http",
+                args.url,
+                timeout=args.timeout,
+            )
+
+        corpus = KnowledgeCorpus(args.corpus)
+
+        report = refresh_corpus(
+            corpus,
+            source,
+            max_pages=args.max_pages,
+            start_index=args.start_index,
+            results_per_page=args.results_per_page,
+            last_mod_start=args.since,
+        )
+
+        payload = report.to_dict()
+
+        if args.json_output:
+            print(json.dumps(payload, indent=2))
+        else:
+            print("AIVEXA KNOWLEDGE REFRESH")
+            print("========================")
+            print(f"source: {report.source}")
+            print(f"success: {report.success}")
+            print(f"pages: {report.pages}")
+            print(
+                "entries_fetched: "
+                f"{report.entries_fetched}"
+            )
+            print(f"added: {report.added}")
+            print(f"updated: {report.updated}")
+            print(f"unchanged: {report.unchanged}")
+            print(
+                "next_start_index: "
+                f"{report.next_start_index}"
+            )
+            print(f"exhausted: {report.exhausted}")
+
+            for error in report.errors:
+                print(f"ERROR: {error}")
+
+        return 0 if report.success else 1
+
+    if args.research_command == "knowledge-status":
+        from datetime import datetime, timezone
+
+        from aivexa.knowledge.corpus import KnowledgeCorpus
+
+        corpus = KnowledgeCorpus(args.corpus)
+        entries = corpus.all()
+
+        now = datetime.now(timezone.utc)
+        stale = [
+            entry
+            for entry in entries
+            if corpus.is_stale(
+                entry,
+                max_age_days=args.max_age_days,
+                now=now,
+            )
+        ]
+
+        retrieved = sorted(
+            entry.retrieved_at
+            for entry in entries
+            if entry.retrieved_at
+        )
+
+        sources: dict[str, int] = {}
+
+        for entry in entries:
+            sources[entry.source] = (
+                sources.get(entry.source, 0) + 1
+            )
+
+        payload = {
+            "corpus": args.corpus,
+            "entries": len(entries),
+            "stale_entries": len(stale),
+            "max_age_days": args.max_age_days,
+            "newest_retrieved_at": (
+                retrieved[-1] if retrieved else None
+            ),
+            "sources": sources,
+        }
+
+        if args.json_output:
+            print(json.dumps(payload, indent=2))
+            return 0
+
+        print("AIVEXA KNOWLEDGE STATUS")
+        print("=======================")
+        print(f"corpus: {args.corpus}")
+        print(f"entries: {len(entries)}")
+        print(f"stale_entries: {len(stale)}")
+        print(
+            "newest_retrieved_at: "
+            f"{payload['newest_retrieved_at']}"
+        )
+        for name, count in sorted(sources.items()):
+            print(f"  {name}: {count}")
+
+        return 0
+
     raise ValueError(
         f"Unsupported research command: {args.research_command}"
     )
@@ -1358,6 +1574,7 @@ def main(argv: list[str] | None = None) -> int:
             runner = AuthorizedResearchRunner(
                 target=target,
                 database=database,
+                max_adaptive_cycles=args.adaptive_cycles,
             )
 
             result = runner.assess(
@@ -1372,6 +1589,23 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 baseline_output=args.baseline_output,
             )
+
+            adaptive_run = None
+
+            if (
+                args.adaptive_cycles > 0
+                and result.finding is not None
+            ):
+                adaptive_run = runner.investigate(
+                    source_experiment_id=args.experiment_id,
+                    source_input=args.input,
+                    checks=build_checks(args.checks),
+                    context=_json_object(args.context),
+                    authorization_context=_json_object(
+                        args.authorization_context
+                    ),
+                    baseline_output=args.baseline_output,
+                )
 
             payload = {
                 "assessment_id": (
@@ -1398,6 +1632,11 @@ def main(argv: list[str] | None = None) -> int:
                 "follow_up_experiment_id": (
                     result.investigation.experiment.experiment_id
                     if result.investigation
+                    else None
+                ),
+                "adaptive": (
+                    adaptive_run.to_dict()
+                    if adaptive_run is not None
                     else None
                 ),
             }
@@ -1434,6 +1673,21 @@ def main(argv: list[str] | None = None) -> int:
                         "Follow-up: "
                         f"{payload['follow_up_experiment_id']}"
                     )
+
+                if payload["adaptive"]:
+                    print(
+                        "Adaptive: "
+                        f"{payload['adaptive']['stopping_reason']} "
+                        f"({len(payload['adaptive']['cycles'])} "
+                        "cycle(s))"
+                    )
+
+                    for cycle in payload["adaptive"]["cycles"]:
+                        print(
+                            f"  cycle {cycle['cycle_number']}: "
+                            f"{cycle['result']} "
+                            f"[{cycle['strategy']}]"
+                        )
 
             return 0
 
