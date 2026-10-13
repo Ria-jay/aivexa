@@ -114,6 +114,16 @@ produces an explicit `RefreshReport` (added/updated/unchanged, next
 start index, errors) so a partial or failed refresh is never presented
 as a successful one.
 
+## Execution reliability
+
+`targets/` adapters do not manage retries or timeouts individually.
+They delegate to a shared `ExecutionPolicy` (`aivexa/execution.py`) that
+provides per-attempt timeouts, an optional overall deadline, bounded
+transient-only retries with backoff, typed `ExecutionError`
+classification (`CONNECTION`, `TIMEOUT`, `HTTP_STATUS`, `MALFORMED`),
+and per-request telemetry. An execution failure is always recorded as an
+execution error and never converted into `PASS`.
+
 ## Boundaries
 
 - Deterministic and local-first; no LLM-as-a-judge is required.

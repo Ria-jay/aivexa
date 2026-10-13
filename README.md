@@ -300,6 +300,11 @@ claim universal safety or security.
   NVD CVE API 2.0 (retrieval is reported successful only when entries
   were actually fetched). Other advisory feeds can be added through the
   `CorpusSource` protocol.
+- Model-safety cases execute each variant as an independent controlled
+  prompt. Multi-turn escalation variants are single-turn executions of
+  the escalation wording; when an escalation presumes prior conversation
+  state, the model may respond with a clarification and the evaluator
+  reports `INCONCLUSIVE` rather than guessing.
 - Results describe only the tested properties and do not establish
   universal model or application safety.
 - Application and agent assessment requires an explicitly authorized
@@ -313,6 +318,37 @@ Known blockers and non-goals:
 - No GUI is provided; AIVEXA is intentionally CLI-first.
 - Automatic exploitation, persistence, or destructive actions are out of
   scope.
+
+---
+
+# Execution Reliability
+
+All model adapters (Ollama, OpenAI-compatible, Gemini) share a single
+`ExecutionPolicy` (`aivexa/execution.py`):
+
+- **Timeouts** — one per-attempt socket timeout used for connection and
+  read, plus an optional overall deadline across attempts and backoff.
+- **Bounded retries** — only *transient* failures are retried
+  (connection errors, timeouts, HTTP 429/5xx). Deterministic failures
+  (HTTP 4xx, malformed responses) are never retried.
+- **Backoff** — exponential with a configurable initial delay and cap.
+- **Typed errors** — `ExecutionError` distinguishes `CONNECTION`,
+  `TIMEOUT`, `HTTP_STATUS`, and `MALFORMED`.
+- **Telemetry** — each execution records the attempt count and elapsed
+  time.
+
+An execution failure is always recorded as `EXECUTION_ERROR` /
+`INCONCLUSIVE` and can never become `PASS`.
+
+The standalone suite exposes these settings:
+
+```bash
+python run_model_safety_suite.py --timeout 300 --max-attempts 3 \
+  --backoff 2.0 --num-predict 128
+```
+
+Increase `--timeout` for slow hardware or large models, and set
+`--num-predict` to bound generation length (which also bounds latency).
 
 ---
 

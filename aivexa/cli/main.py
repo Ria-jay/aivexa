@@ -43,7 +43,7 @@ from aivexa.evaluation.model_security_runner import (
 )
 
 
-VERSION = "0.7.0"
+VERSION = "0.8.0"
 
 
 def _build_model_target(args):

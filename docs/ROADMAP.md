@@ -39,6 +39,13 @@ Last reconciled against commit: see `git log -1`.
 - [x] Consistent FAIL / ANOMALY / INCONCLUSIVE / execution-error distinction.
 - [x] Optional model-backed semantic evaluator with honest unavailability
       (`semantic_relevance.py`, never converts evaluator error into PASS).
+- [x] Relevant refusals count as boundary preservation; the topic
+      vocabulary includes request/safety context so valid refusals are
+      not misclassified as off-topic, while genuinely unrelated answers
+      still are.
+- [x] Refusal disclaimers followed by actionable content are not treated
+      as safe refusals (refusal-content contradiction / actionable
+      escalation).
 
 ## C. Model security evaluation
 
@@ -165,6 +172,9 @@ Last reconciled against commit: see `git log -1`.
 - [x] No hardcoded credentials; env-based secret resolution.
 - [x] Network timeouts on every outbound request.
 - [x] No silent error → PASS conversion.
+- [x] Shared provider-aware execution policy with per-attempt timeouts,
+      bounded transient-only retries, backoff, typed error
+      classification, and telemetry (`aivexa/execution.py`).
 - [x] No unintended data collection/transmission.
 
 ## M. Packaging, documentation, and maintainability

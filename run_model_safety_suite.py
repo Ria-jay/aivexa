@@ -6,6 +6,7 @@ from pathlib import Path
 
 from aivexa.evaluation.model_safety import ModelSafetySuite
 from aivexa.evaluation.safety_boundary_engine import SafetyBoundaryEngine
+from aivexa.execution import ExecutionPolicy
 from aivexa.targets.ollama import OllamaTarget
 from aivexa.reporting.model_safety_report import generate_model_safety_report
 
@@ -13,19 +14,42 @@ from aivexa.reporting.model_safety_report import generate_model_safety_report
 def execute_prompt(
     target: OllamaTarget,
     prompt: str,
+    generation_options: dict | None = None,
 ) -> dict:
+    """
+    Execute one prompt.
+
+    Retries and timeout handling live in the target's shared
+    ``ExecutionPolicy``, so there is no second retry loop here. The
+    attempt count is recorded from the target's execution telemetry.
+    """
     try:
-        output = target.generate(prompt)
+        output = target.generate(
+            prompt,
+            options=generation_options,
+        )
+        telemetry = getattr(target, "last_telemetry", None)
         return {
             "status": "COMPLETED",
             "output": output,
             "error": None,
+            "attempts": (
+                telemetry.attempts
+                if telemetry is not None
+                else 1
+            ),
         }
     except Exception as exc:
+        telemetry = getattr(target, "last_telemetry", None)
         return {
             "status": "ERROR",
             "output": None,
             "error": f"{type(exc).__name__}: {exc}",
+            "attempts": (
+                telemetry.attempts
+                if telemetry is not None
+                else 0
+            ),
         }
 
 
@@ -33,10 +57,12 @@ def run_case(
     target: OllamaTarget,
     case,
     evaluator: SafetyBoundaryEngine,
+    generation_options: dict | None = None,
 ) -> dict:
     baseline_execution = execute_prompt(
         target,
         case.baseline_prompt,
+        generation_options=generation_options,
     )
 
     if baseline_execution["status"] == "ERROR":
@@ -60,6 +86,7 @@ def run_case(
         execution = execute_prompt(
             target,
             variant_prompt,
+            generation_options=generation_options,
         )
 
         if execution["status"] == "ERROR":
@@ -176,12 +203,54 @@ def main() -> None:
         default="model_safety_results.json",
     )
 
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=300,
+        help="Per-attempt socket timeout in seconds.",
+    )
+
+    parser.add_argument(
+        "--num-predict",
+        type=int,
+        default=128,
+        help="Maximum tokens to generate per request.",
+    )
+
+    parser.add_argument(
+        "--max-attempts",
+        type=int,
+        default=3,
+        help=(
+            "Maximum attempts per request (transient failures only)."
+        ),
+    )
+
+    parser.add_argument(
+        "--backoff",
+        type=float,
+        default=2.0,
+        help="Initial retry backoff in seconds.",
+    )
+
     args = parser.parse_args()
+
+    policy = ExecutionPolicy(
+        timeout=args.timeout,
+        max_attempts=args.max_attempts,
+        backoff_seconds=args.backoff,
+    )
 
     target = OllamaTarget(
         endpoint=args.endpoint,
         model=args.model,
+        policy=policy,
     )
+
+    generation_options = {}
+
+    if args.num_predict is not None:
+        generation_options["num_predict"] = args.num_predict
 
     evaluator = SafetyBoundaryEngine()
     cases = ModelSafetySuite.default_cases()
@@ -203,6 +272,7 @@ def main() -> None:
             target=target,
             case=case,
             evaluator=evaluator,
+            generation_options=generation_options,
         )
 
         results.append(result)

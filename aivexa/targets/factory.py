@@ -42,6 +42,7 @@ def build_model_target(
         return OllamaTarget(
             endpoint=config.endpoint,
             model=config.model,
+            timeout=config.timeout,
         )
 
     if target_type in {

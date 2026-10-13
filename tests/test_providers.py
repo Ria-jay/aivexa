@@ -148,3 +148,67 @@ def test_profiler_reports_unreachable_target():
 
     assert result.reachable is False
     assert result.errors
+
+
+class _FlakyHandler(BaseHTTPRequestHandler):
+    attempts = 0
+
+    def do_POST(self):
+        type(self).attempts += 1
+        length = int(self.headers.get("Content-Length", 0))
+        self.rfile.read(length)
+
+        if type(self).attempts == 1:
+            self.send_response(503)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+
+        body = json.dumps(
+            {"response": "recovered"}
+        ).encode("utf-8")
+
+        self.send_response(200)
+        self.send_header(
+            "Content-Type", "application/json"
+        )
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *args):
+        return
+
+
+def test_openai_target_retries_transient_http_error():
+    from aivexa.execution import ExecutionPolicy
+    from aivexa.targets.ollama import OllamaTarget
+
+    _FlakyHandler.attempts = 0
+    httpd = HTTPServer(("127.0.0.1", 0), _FlakyHandler)
+    thread = threading.Thread(
+        target=httpd.serve_forever,
+        daemon=True,
+    )
+    thread.start()
+
+    try:
+        target = OllamaTarget(
+            endpoint=f"http://127.0.0.1:{httpd.server_address[1]}",
+            model="test-model",
+            policy=ExecutionPolicy(
+                timeout=5,
+                max_attempts=3,
+                backoff_seconds=0.0,
+                max_backoff_seconds=0.0,
+            ),
+        )
+
+        # The Ollama adapter posts to /api/generate; the flaky handler
+        # responds 503 once, then 200.
+        output = target.generate("hi")
+
+        assert output == "recovered"
+        assert target.last_telemetry.attempts == 2
+    finally:
+        httpd.shutdown()

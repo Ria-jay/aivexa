@@ -5,6 +5,12 @@ from urllib import request
 from urllib.error import HTTPError, URLError
 
 from aivexa.evidence.system import SystemInteraction
+from aivexa.execution import (
+    ErrorKind,
+    ExecutionError,
+    ExecutionPolicy,
+    execute_with_retries,
+)
 from aivexa.targets.application import AIApplicationTarget
 
 
@@ -29,6 +35,7 @@ class GeminiTarget(AIApplicationTarget):
             "https://generativelanguage.googleapis.com/v1beta"
         ),
         timeout: int = 120,
+        policy: ExecutionPolicy | None = None,
     ):
         super().__init__(
             name=name,
@@ -39,13 +46,44 @@ class GeminiTarget(AIApplicationTarget):
             api_key
             or os.environ.get("GEMINI_API_KEY")
         )
-        self.timeout = timeout
+        self.policy = policy or ExecutionPolicy(timeout=timeout)
+        self.timeout = self.policy.timeout
+        self.last_telemetry = None
 
         if not self.api_key:
             raise RuntimeError(
                 "Gemini API key is required. "
                 "Set GEMINI_API_KEY or pass api_key."
             )
+
+    def _post(
+        self,
+        url: str,
+        body: bytes,
+    ) -> tuple[str, int]:
+        req = request.Request(
+            url,
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+
+        try:
+            with request.urlopen(
+                req,
+                timeout=self.policy.timeout,
+            ) as response:
+                return (
+                    response.read().decode("utf-8"),
+                    response.status,
+                )
+        except (HTTPError, URLError):
+            raise
+        except Exception as exc:  # noqa: BLE001
+            raise ExecutionError(
+                ErrorKind.UNKNOWN,
+                f"{type(exc).__name__}: {exc}",
+            ) from exc
 
     def interact(
         self,
@@ -103,36 +141,20 @@ class GeminiTarget(AIApplicationTarget):
 
         body = json.dumps(payload).encode("utf-8")
 
-        req = request.Request(
-            url,
-            data=body,
-            headers={
-                "Content-Type": "application/json",
-            },
-            method="POST",
+        (raw, status_code), telemetry = execute_with_retries(
+            lambda: self._post(url, body),
+            self.policy,
         )
+        self.last_telemetry = telemetry
 
         try:
-            with request.urlopen(
-                req,
-                timeout=self.timeout,
-            ) as response:
-                raw = response.read().decode("utf-8")
-                status_code = response.status
-        except HTTPError as exc:
-            detail = exc.read().decode(
-                "utf-8",
-                errors="replace",
-            )
-            raise RuntimeError(
-                f"Gemini returned HTTP {exc.code}: {detail[:500]}"
+            data = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise ExecutionError(
+                ErrorKind.MALFORMED,
+                "Gemini returned invalid JSON",
+                retryable=False,
             ) from exc
-        except URLError as exc:
-            raise RuntimeError(
-                f"Could not connect to Gemini API: {exc}"
-            ) from exc
-
-        data = json.loads(raw)
 
         candidates = data.get("candidates", [])
 

@@ -6,6 +6,13 @@ from typing import Any
 from urllib import request
 from urllib.error import HTTPError, URLError
 
+from aivexa.execution import (
+    ErrorKind,
+    ExecutionError,
+    ExecutionPolicy,
+    execute_with_retries,
+)
+
 
 class OpenAICompatibleTarget:
     """
@@ -19,7 +26,8 @@ class OpenAICompatibleTarget:
     evaluation layer.
 
     Credentials are never stored in code; the API key is read from the
-    configured environment variable at construction time.
+    configured environment variable at construction time. Transient
+    failures are retried under AIVEXA's shared execution policy.
     """
 
     def __init__(
@@ -29,6 +37,7 @@ class OpenAICompatibleTarget:
         endpoint: str,
         api_key_env: str = "",
         timeout: int = 120,
+        policy: ExecutionPolicy | None = None,
     ):
         if not endpoint.strip():
             raise ValueError(
@@ -44,7 +53,9 @@ class OpenAICompatibleTarget:
         self.model = model
         self.endpoint = endpoint.rstrip("/")
         self.api_key_env = api_key_env
-        self.timeout = timeout
+        self.policy = policy or ExecutionPolicy(timeout=timeout)
+        self.timeout = self.policy.timeout
+        self.last_telemetry = None
         self.api_key = (
             os.environ.get(api_key_env)
             if api_key_env
@@ -63,10 +74,10 @@ class OpenAICompatibleTarget:
 
         return headers
 
-    def generate(
+    def _request(
         self,
         prompt: str,
-        options: dict[str, Any] | None = None,
+        options: dict[str, Any] | None,
     ) -> str:
         options = dict(options or {})
 
@@ -98,31 +109,33 @@ class OpenAICompatibleTarget:
         try:
             with request.urlopen(
                 req,
-                timeout=self.timeout,
+                timeout=self.policy.timeout,
             ) as response:
                 raw = response.read().decode("utf-8")
-        except HTTPError as exc:
-            detail = exc.read().decode(
-                "utf-8",
-                errors="replace",
-            )
-            raise RuntimeError(
-                f"OpenAI-compatible endpoint returned "
-                f"HTTP {exc.code}: {detail[:300]}"
-            ) from exc
-        except URLError as exc:
-            raise RuntimeError(
-                f"Could not connect to OpenAI-compatible "
-                f"endpoint at {self.endpoint}"
+        except (HTTPError, URLError):
+            raise
+        except Exception as exc:  # noqa: BLE001
+            raise ExecutionError(
+                ErrorKind.UNKNOWN,
+                f"{type(exc).__name__}: {exc}",
             ) from exc
 
-        data = json.loads(raw)
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise ExecutionError(
+                ErrorKind.MALFORMED,
+                "OpenAI-compatible endpoint returned invalid JSON",
+                retryable=False,
+            ) from exc
 
         choices = data.get("choices")
 
         if not choices:
-            raise RuntimeError(
-                "OpenAI-compatible endpoint returned no choices."
+            raise ExecutionError(
+                ErrorKind.MALFORMED,
+                "OpenAI-compatible endpoint returned no choices.",
+                retryable=False,
             )
 
         message = choices[0].get("message", {})
@@ -130,9 +143,23 @@ class OpenAICompatibleTarget:
         content = message.get("content")
 
         if content is None:
-            raise RuntimeError(
-                "OpenAI-compatible response contained no "
-                "message content."
+            raise ExecutionError(
+                ErrorKind.MALFORMED,
+                "OpenAI-compatible response contained no message content.",
+                retryable=False,
             )
 
         return str(content)
+
+    def generate(
+        self,
+        prompt: str,
+        options: dict[str, Any] | None = None,
+    ) -> str:
+        result, telemetry = execute_with_retries(
+            lambda: self._request(prompt, options),
+            self.policy,
+        )
+
+        self.last_telemetry = telemetry
+        return result
